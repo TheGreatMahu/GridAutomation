@@ -1,0 +1,46 @@
+name: PGCB Hourly Generation – Scrape & Sync
+
+on:
+  # ── Scheduled run: every hour at :05 (Bangladesh = UTC+6, so HH:05 local) ──
+  schedule:
+    - cron: "5 * * * *"
+
+  # ── Manual trigger from the Actions tab ──
+  workflow_dispatch:
+    inputs:
+      pages:
+        description: "Number of pages to scrape (use 'all' for full backfill)"
+        required: false
+        default: "5"
+
+jobs:
+  sync:
+    name: Scrape → Clean → Upsert
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # 1. Checkout code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Set up Python
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # 3. Install dependencies
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # 4. Run the pipeline
+      - name: Run pipeline
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          PAGES="${{ github.event.inputs.pages || '5' }}"
+          python main.py --pages "$PAGES"
+
