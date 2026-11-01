@@ -8,9 +8,15 @@ URL: https://erp.powergrid.gov.bd/w/generations/view_generations
 """
 
 import time
+import warnings
 import pandas as pd
 import requests
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
 from bs4 import BeautifulSoup
+
+# The PGCB government portal uses a self-signed / unverified SSL cert.
+# We disable SSL verification only for this specific host and suppress the warning.
+warnings.filterwarnings("ignore", category=InsecureRequestWarning)
 
 BASE_URL = "https://erp.powergrid.gov.bd/w/generations/view_generations"
 
@@ -85,7 +91,7 @@ def scrape(max_pages: int = 5, delay: float = 1.0) -> pd.DataFrame:
         print(f"[scraper] Fetching page {page}: {url}")
 
         try:
-            resp = session.get(url, timeout=30)
+            resp = session.get(url, timeout=30, verify=False)
         except requests.RequestException as exc:
             print(f"[scraper] Request failed on page {page}: {exc}")
             break
