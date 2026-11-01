@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS hourly_generation (
     -- Cross-border imports
     "India"          NUMERIC,
     "Nepal"          NUMERIC,
+    "Adani"          NUMERIC,   -- Adani power import (added to PGCB portal)
 
     -- Free-text remarks (optional)
     "Remarks"        TEXT,
@@ -26,6 +27,9 @@ CREATE TABLE IF NOT EXISTS hourly_generation (
     -- Metadata
     inserted_at      TIMESTAMPTZ    NOT NULL DEFAULT NOW()
 );
+
+-- Ensure the Adani column exists if the table was created previously
+ALTER TABLE hourly_generation ADD COLUMN IF NOT EXISTS "Adani" NUMERIC;
 
 -- Index for fast time-range queries
 CREATE INDEX IF NOT EXISTS idx_hourly_generation_datetime

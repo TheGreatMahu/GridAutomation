@@ -33,6 +33,43 @@ def _get_client() -> Client:
     return create_client(url, key)
 
 
+def _get_table_columns(client: Client, url: str, key: str) -> set[str]:
+    """
+    Fetch column names that actually exist in the target table.
+    Tries the PostgREST OpenAPI schema first (works even when the table is empty),
+    then falls back to inspecting a sample row.
+    """
+    import requests
+    # 1. Try OpenAPI schema from PostgREST
+    try:
+        resp = requests.get(
+            f"{url}/rest/v1/",
+            headers={"apikey": key, "Authorization": f"Bearer {key}"},
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            schema = resp.json()
+            # Swagger 2.0 (PostgREST default)
+            props = schema.get("definitions", {}).get(TABLE_NAME, {}).get("properties")
+            if not props:
+                # OpenAPI 3.0
+                props = schema.get("components", {}).get("schemas", {}).get(TABLE_NAME, {}).get("properties")
+            if props:
+                return set(props.keys())
+    except Exception as exc:
+        print(f"[uploader] Note: Could not fetch schema via OpenAPI: {exc}")
+
+    # 2. Fall back to querying existing row
+    try:
+        resp = client.table(TABLE_NAME).select("*").limit(1).execute()
+        if resp.data:
+            return set(resp.data[0].keys())
+    except Exception:
+        pass
+
+    return set()
+
+
 def _df_to_records(df: pd.DataFrame) -> list[dict]:
     """Convert DataFrame rows to JSON-serialisable dicts (NaN → None)."""
     records = df.to_dict(orient="records")
@@ -47,6 +84,16 @@ def _df_to_records(df: pd.DataFrame) -> list[dict]:
     return cleaned
 
 
+def _filter_known_columns(records: list[dict], known_cols: set[str]) -> list[dict]:
+    """Drop any keys that don't exist as columns in the Supabase table."""
+    if not known_cols:
+        return records
+    filtered = []
+    for rec in records:
+        filtered.append({k: v for k, v in rec.items() if k in known_cols})
+    return filtered
+
+
 def upload(df: pd.DataFrame) -> int:
     """
     Upsert *df* into the ``hourly_generation`` Supabase table.
@@ -57,8 +104,22 @@ def upload(df: pd.DataFrame) -> int:
         print("[uploader] DataFrame is empty – nothing to upload.")
         return 0
 
+    url = os.environ.get("SUPABASE_URL", "").strip()
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
     client = _get_client()
     records = _df_to_records(df)
+
+    # ── Filter out columns the table doesn't know about ──────────────────────
+    known_cols = _get_table_columns(client, url, key)
+    if known_cols:
+        before = len(next(iter(records), {}).keys()) if records else 0
+        records = _filter_known_columns(records, known_cols)
+        after  = len(next(iter(records), {}).keys()) if records else 0
+        dropped = before - after
+        if dropped:
+            missing = set(df.columns) - known_cols
+            print(f"[uploader] Dropped {dropped} column(s) not in Supabase schema: {missing}")
+    # ─────────────────────────────────────────────────────────────────────────
 
     total   = len(records)
     batches = math.ceil(total / BATCH_SIZE)

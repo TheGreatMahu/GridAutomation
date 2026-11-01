@@ -34,7 +34,7 @@ HEADERS = {
 # Expected columns from the site (fallback if <th> tags are absent)
 FALLBACK_COLS = [
     "Date", "Time", "Generation(MW)", "Gas", "Liquid Fuel",
-    "Coal", "Hydro", "Solar", "Wind", "India", "Nepal", "Remarks",
+    "Coal", "Hydro", "Solar", "Wind", "India", "Nepal", "Adani", "Remarks",
 ]
 
 
